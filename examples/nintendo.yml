@@ -1,0 +1,111 @@
+mqtt:
+  sensor:
+    - name: "CEC Last Message"
+      unique_id: "cec_last_message"
+      state_topic: "cec/all"
+    - name: "CEC Last Incoming Message"
+      unique_id: "cec_last_incoming_message"
+      state_topic: "cec/in"
+    - name: "CEC Last Outgoing Message"
+      unique_id: "cec_last_outgoing_message"
+      state_topic: "cec/out"
+
+binary_sensor:
+  - platform: ping
+    host: 10.128.25.171
+    name: nintendo_ping
+    count: 2
+    scan_interval: 10
+
+input_boolean:
+  #this gets set when the Nintendo Switch's power on sequence bytes are seen
+  nintendo_detected:
+    name: Nintendo Switch Detected
+    initial: false
+
+  #Turns on when the Nintendo CEC messages are detected and turns off when
+  #it no longer responds to ping. This is the one you want to monitor
+  nintendo_power:
+    name: Nintendo Switch Power
+    icon: mdi:nintendo-switch
+    initial: false
+
+input_text:
+  cec_byte_history:
+    name: CEC Byte History
+    initial: ""
+    max: 255
+    mode: text
+
+automation:
+  - alias: "Detect Nintendo Switch Power Sequence"
+    trigger:
+      - platform: mqtt
+        topic: "cec/in"
+    variables:
+      raw: "{{ trigger.payload | string }}"
+      parts: "{{ raw.split('|') }}"
+      byte: "{{ parts[1] | string | lower if parts | length > 1 else '' }}"
+      old: "{{ states('input_text.cec_byte_history') | string }}"
+      history: "{{ ((old ~ ',' ~ byte).split(',') | reject('eq', '') | list)[-6:] }}"
+    action:
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.cec_byte_history
+        data:
+          value: "{{ history | join(',') }}"
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{ history == ['44', '88', 'bb', '44', '88', 'bb'] }}
+            sequence:
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.nintendo_detected
+              - delay: "00:00:05"
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.nintendo_detected
+
+  - alias: "Set Nintendo Switch Power to on when CEC is detected"
+    trigger:
+      - platform: state
+        entity_id: input_boolean.nintendo_detected
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.nintendo_power
+        state: "off"
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.nintendo_power
+
+  - alias: "Set Nintendo Switch Power off when it goes offline"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.nintendo_ping
+        to: "off"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.nintendo_power
+
+#this is an unfinished idea
+template:
+  - switch:
+      - name: "Nintendo Switch"
+        icon: mdi:nintendo-switch
+        state: "{{ is_state('input_boolean.nintendo_power', 'on') }}"
+        turn_on:
+          service: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.nintendo_power
+          #TODO nxbt to turn on the switch?
+
+        turn_off:
+          service: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.nintendo_power
+          #TODO nxbt to turn off the switch?

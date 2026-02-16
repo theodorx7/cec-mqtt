@@ -1,0 +1,38 @@
+{
+  "name": "CEC MQTT Bridge",
+  "version": "1.1",
+  "description": "Send and receive HDMI CEC messages using MQTT",
+  "slug": "cec_mqtt",
+  "init": false,
+  "arch": ["amd64", "armv7", "aarch64"],
+  "startup": "services",
+  "boot": "auto",
+  "options": {
+    "mqtt_host": "core-mosquitto",
+    "mqtt_port": 1883,
+    "mqtt_user": "",
+    "mqtt_password": "",
+    "mqtt_topic_send": "cec/send",
+    "mqtt_topic_receive": "cec/receive",
+    "mqtt_topic_all": "cec/all",
+    "mqtt_topic_in": "cec/in",
+    "mqtt_topic_out": "cec/out",
+    "debug_log": false
+  },
+  "schema": {
+    "mqtt_host": "str",
+    "mqtt_port": "int",
+    "mqtt_user": "str",
+    "mqtt_password": "str?",
+    "mqtt_topic_send": "str",
+    "mqtt_topic_receive": "str",
+    "mqtt_topic_all": "str",
+    "mqtt_topic_in": "str",
+    "mqtt_topic_out": "str",
+    "debug_log": "bool"
+  },
+  "devices": ["/dev/ttyACM0"],
+  "privileged": [],
+  "usb": true,
+  "udev": true
+}
