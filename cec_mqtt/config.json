@@ -23,7 +23,7 @@
     "mqtt_host": "str",
     "mqtt_port": "int",
     "mqtt_user": "str",
-    "mqtt_password": "str?",
+    "mqtt_password": "password?",
     "mqtt_topic_send": "str",
     "mqtt_topic_receive": "str",
     "mqtt_topic_all": "str",
