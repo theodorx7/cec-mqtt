@@ -56,5 +56,4 @@ automation:
 |-------------|------------------------|
 | `on 0`      | Power on TV (logical 0)|
 | `standby 0` | Power off TV           |
-| `tx 10:6D`  | Send raw frame         |
-| `as`        | Set active source      |
+| `tx 10:8F`  | Request TV power status |

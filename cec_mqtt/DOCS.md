@@ -60,8 +60,7 @@ Publish any valid `cec-client` command:
 |---|---|
 | `on 0` | Power on TV (device 0) |
 | `standby 0` | Power off TV |
-| `tx 10:6D` | Send raw CEC frame |
-| `as` | Set active source |
+| `tx 10:8F` | Request TV power status |
 
 ## CEC adapter
 
