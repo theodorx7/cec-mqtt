@@ -4,6 +4,7 @@ import threading
 import json
 import os
 import time
+import re
 import glob
 
 options_path = "/data/options.json"
@@ -24,7 +25,7 @@ if os.path.exists(options_path):
     MQTT_TOPIC_OUT = opts.get("mqtt_topic_out", "cec/out")
     DEBUG_LOG = opts.get("debug_log", False)
 
-    # Optional override: "/dev/cec0" or "/dev/cec1"
+    # Optional override: "/dev/cec0", "/dev/cec1", "RPI", etc.
     CEC_ADAPTER = (opts.get("cec_adapter", "") or "").strip()
 else:
     MQTT_BROKER = os.getenv("MQTT_BROKER", "mqtt.local")
@@ -49,64 +50,121 @@ DISCOVERY_SENSORS = [
 ]
 
 process = None
+selected_adapter = None
 
 client = mqtt.Client()
 if MQTT_USER:
     client.username_pw_set(MQTT_USER, MQTT_PASS)
 
 
-def _read_text(path: str) -> str:
+def _dedupe_keep_order(items: list[str]) -> list[str]:
+    seen = set()
+    out = []
+    for x in items:
+        if x and x not in seen:
+            out.append(x)
+            seen.add(x)
+    return out
+
+
+def list_adapters_from_cec_client() -> list[str]:
+    """
+    cec-client -l обычно печатает строки вида:
+      device: 1 com port: /dev/cec0 ...
+      device: 2 com port: /dev/cec1 ...
+    """
     try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read().strip()
-    except Exception:
-        return ""
+        r = subprocess.run(
+            ["cec-client", "-l"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        text_out = (r.stdout or "") + "\n" + (r.stderr or "")
+    except Exception as err:
+        print(f"[WARN] cec-client -l failed: {err}", flush=True)
+        return []
+
+    ports = []
+    for line in text_out.splitlines():
+        m = re.search(r"com port:\s*([^\s]+)", line)
+        if m:
+            port = m.group(1).strip()
+            # иногда встречается "device: 3 com port:" (пусто) — пропускаем
+            if port and port.lower() not in ("none", "null"):
+                ports.append(port)
+    return _dedupe_keep_order(ports)
 
 
-def autodetect_cec_adapter() -> str:
-    """
-    Priority:
-      1) Use explicit CEC_ADAPTER if set (e.g. /dev/cec1).
-      2) If only one /dev/cec* exists -> use it.
-      3) If multiple /dev/cec* exist -> try to pick based on DRM connector status.
-      4) Fallback -> /dev/cec0 if exists, else empty string (cec-client auto).
-    """
+def build_candidate_adapters() -> list[str]:
+    # 1) explicit override
     if CEC_ADAPTER:
-        return CEC_ADAPTER
+        return [CEC_ADAPTER]
 
-    cec_devs = sorted(glob.glob("/dev/cec[0-9]*"))
-    if len(cec_devs) == 1:
-        return cec_devs[0]
+    candidates: list[str] = []
 
-    if len(cec_devs) >= 2:
-        # Common mapping on RPi KMS:
-        # HDMI-A-1 -> /dev/cec0
-        # HDMI-A-2 -> /dev/cec1
-        drm_status_files = glob.glob("/sys/class/drm/*HDMI-A-*/status")
-        connected = set()
+    # 2) prefer libCEC/cec-client list
+    candidates += list_adapters_from_cec_client()
 
-        for st in drm_status_files:
-            status = _read_text(st)
-            connector = os.path.basename(os.path.dirname(st))  # e.g. card1-HDMI-A-1
-            if status == "connected":
-                connected.add(connector)
+    # 3) fallbacks (как у тебя в bridge-app)
+    if os.path.exists("/dev/cec0"):
+        candidates.append("/dev/cec0")
+    if os.path.exists("/dev/cec1"):
+        candidates.append("/dev/cec1")
+    candidates.append("RPI")
 
-        if len(connected) == 1:
-            conn = next(iter(connected))
-            if conn.endswith("HDMI-A-1") and "/dev/cec0" in cec_devs:
-                return "/dev/cec0"
-            if conn.endswith("HDMI-A-2") and "/dev/cec1" in cec_devs:
-                return "/dev/cec1"
+    return _dedupe_keep_order(candidates)
 
-        if "/dev/cec0" in cec_devs:
-            return "/dev/cec0"
-        return cec_devs[0]
 
-    return ""
+def probe_adapter(adapter: str) -> bool:
+    """
+    Проверяем адаптер так же “мягко”, как bridge-app (Open()) — но через cec-client:
+    запускаем single-command режим (-s) и отправляем 'scan', ждём вывод.
+    """
+    cmd = ["cec-client", "-s", "-t", "p", "-d", "1"]
+    if adapter:
+        cmd.append(adapter)
+
+    try:
+        r = subprocess.run(
+            cmd,
+            input="scan\n",
+            text=True,
+            capture_output=True,
+            timeout=8,
+        )
+        out = (r.stdout or "") + "\n" + (r.stderr or "")
+        low = out.lower()
+
+        if "could not open a connection" in low or "error opening" in low:
+            return False
+        # типичный успешный вывод содержит это (или близкое)
+        if "opening a connection" in low or "requesting cec bus information" in low:
+            return True
+
+        # если код 0 и нет явных ошибок — считаем успехом
+        return r.returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+    except Exception:
+        return False
+
+
+def select_adapter() -> str:
+    candidates = build_candidate_adapters()
+    print(f"[INFO] CEC candidates: {candidates}", flush=True)
+
+    for cand in candidates:
+        print(f"[INFO] Probing CEC adapter: {cand}", flush=True)
+        if probe_adapter(cand):
+            print(f"[INFO] Selected CEC adapter: {cand}", flush=True)
+            return cand
+        time.sleep(0.2)
+
+    raise ConnectionError(f"Could not connect to CEC adapter (tried: {candidates})")
 
 
 def publish_discovery(mqtt_client):
-    """Publish MQTT discovery configs so HA auto-creates sensor entities."""
     topic_map = {
         "MQTT_TOPIC_ALL": MQTT_TOPIC_ALL,
         "MQTT_TOPIC_IN": MQTT_TOPIC_IN,
@@ -150,6 +208,7 @@ def on_connect(mqtt_client, userdata, flags, rc):
 def on_message(mqtt_client, userdata, msg):
     global process
     command = msg.payload.decode(errors="ignore").strip()
+
     if DEBUG_LOG:
         print(f"Sending CEC command: {command}", flush=True)
 
@@ -164,12 +223,9 @@ def on_message(mqtt_client, userdata, msg):
         print(f"Failed to send command: {e}", flush=True)
 
 
-def start_cec_client():
-    adapter = autodetect_cec_adapter()
+def start_cec_client(adapter: str | None):
     cmd = ["cec-client", "-t", "p", "-d", "8"]
-
-    # cec-client supports optional [COM PORT] argument (e.g. /dev/cec1).
-    # If not provided, it connects to the first detected device.
+    # cec-client принимает [COM PORT] как позиционный аргумент :contentReference[oaicite:2]{index=2}
     if adapter:
         cmd.append(adapter)
 
@@ -205,7 +261,10 @@ def read_output(proc):
 print("Waiting for CEC adapter to settle...", flush=True)
 time.sleep(10)
 
-process = start_cec_client()
+# ---- Select adapter like bridge-app ----
+selected_adapter = select_adapter()
+
+process = start_cec_client(selected_adapter)
 print("CEC listener ready (RX + TX via MQTT)", flush=True)
 
 client.on_connect = on_connect
@@ -221,10 +280,18 @@ try:
     while True:
         if process.poll() is not None:
             print("cec-client exited, restarting...", flush=True)
-            time.sleep(5)
-            process = start_cec_client()
+            time.sleep(3)
+
+            # если устройство/порт поменялся — попробуем пере-выбрать
+            try:
+                selected_adapter = select_adapter()
+            except Exception as err:
+                print(f"[WARN] Re-select adapter failed: {err}", flush=True)
+
+            process = start_cec_client(selected_adapter)
             reader = threading.Thread(target=read_output, args=(process,), daemon=True)
             reader.start()
+
         time.sleep(1)
 except KeyboardInterrupt:
     pass
