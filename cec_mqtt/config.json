@@ -18,7 +18,8 @@
     "mqtt_topic_all": "cec/all",
     "mqtt_topic_in": "cec/in",
     "mqtt_topic_out": "cec/out",
-    "debug_log": false
+    "debug_log": false,
+    "cec_adapter": ""
   },
   "schema": {
     "mqtt_host": "str",
@@ -30,8 +31,10 @@
     "mqtt_topic_all": "str",
     "mqtt_topic_in": "str",
     "mqtt_topic_out": "str",
-    "debug_log": "bool"
+    "debug_log": "bool",
+    "cec_adapter": "str?"
   },
+  "devices": ["/dev/cec0", "/dev/cec1"],
   "privileged": [],
   "udev": true
 }
