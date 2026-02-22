@@ -33,7 +33,7 @@ else:
     DEBUG_LOG = os.getenv("DEBUG_LOG", "false").lower() == "true"
 
 DISCOVERY_PREFIX = "homeassistant"
-ADDON_VERSION = "1.2"
+ADDON_VERSION = "1.3"
 
 DISCOVERY_SENSORS = [
     {

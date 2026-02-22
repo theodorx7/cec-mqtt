@@ -1,6 +1,6 @@
 {
   "name": "CEC MQTT Bridge",
-  "version": "1.2",
+  "version": "1.3",
   "description": "Send and receive HDMI CEC messages using MQTT",
   "slug": "cec_mqtt",
   "init": false,
