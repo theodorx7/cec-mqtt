@@ -36,5 +36,6 @@
   },
   "devices": ["/dev/cec0", "/dev/cec1"],
   "privileged": [],
+  "video": true,
   "udev": true
 }
