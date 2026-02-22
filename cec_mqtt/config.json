@@ -11,8 +11,8 @@
   "options": {
     "mqtt_host": "core-mosquitto",
     "mqtt_port": 1883,
-    "mqtt_user": "",
-    "mqtt_password": "",
+    "mqtt_user": "mqtt",
+    "mqtt_password": "mqtt",
     "mqtt_topic_send": "cec/send",
     "mqtt_topic_receive": "cec/receive",
     "mqtt_topic_all": "cec/all",
