@@ -21,6 +21,18 @@ The add-on runs `cec-client` as a subprocess and connects to your MQTT broker. I
 | `mqtt_topic_out` | Topic for outgoing messages with timestamps | `cec/out` |
 | `debug_log` | Enable verbose logging | `false` |
 
+## Sensors
+
+The add-on automatically registers three sensor entities in Home Assistant via [MQTT discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery):
+
+| Entity | Description | MQTT topic |
+|---|---|---|
+| `sensor.cec_last_message` | All CEC traffic (in + out) | `cec/all` |
+| `sensor.cec_last_incoming_message` | Incoming CEC frames only | `cec/in` |
+| `sensor.cec_last_outgoing_message` | Outgoing CEC frames only | `cec/out` |
+
+These sensors appear under the **CEC MQTT Bridge** device in Home Assistant. No manual YAML configuration is required.
+
 ## MQTT message formats
 
 ### Receiving (`cec/receive`)

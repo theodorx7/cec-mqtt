@@ -1,36 +1,54 @@
-mqtt:
-  sensor:
-    - name: "CEC Last Message"
-      unique_id: "cec_last_message"
-      state_topic: "cec/all"
-    - name: "CEC Last Incoming Message"
-      unique_id: "cec_last_incoming_message"
-      state_topic: "cec/in"
-    - name: "CEC Last Outgoing Message"
-      unique_id: "cec_last_outgoing_message"
-      state_topic: "cec/out"
+# Nintendo Switch Power State Detection
+#
+# Monitors the power state of a Nintendo Switch using HDMI-CEC messages
+# and network ping. The Switch has a broken CEC implementation so this
+# workaround detects it's power on CEC byte pattern and uses ping to 
+# detect when it goes to sleep.
+#
+#
+# Prerequisites:
+#   - CEC MQTT Bridge add-on (https://github.com/cteachworth/cec-mqtt)
+#   - MQTT integration configured in Home Assistant
+#   - Nintendo Switch connected via HDMI to the same CEC bus
+#   - Nintendo Switch connected to your network (for ping detection)
+#
+# How it works:
+#   1. The CEC MQTT add-on publishes incoming CEC frames to cec/in
+#   2. An automation watches for the Switch's distinctive power-on
+#      byte sequence on the CEC bus
+#   3. The ping sensor monitors the Switch's IP to detect when it
+#      goes to sleep or is powered off
+#
+# The entity to monitor is: input_boolean.nintendo_power
+#
 
-binary_sensor:
-  - platform: ping
-    host: 10.128.25.171
-    name: nintendo_ping
-    count: 2
-    scan_interval: 10
+# Pings the Nintendo Switch every 10 seconds to detect when it goes offline.
+# CHANGE the IP address to your Nintendo Switch's IP.
+# (Find it on your Switch: System Settings > Internet > Connection Status)
+command_line:
+  - binary_sensor:
+      name: nintendo_ping
+      command: "ping -c 1 -W 2 10.128.25.171 > /dev/null 2>&1 && echo ON || echo OFF"
+      payload_on: "ON"
+      payload_off: "OFF"
+      scan_interval: 10
 
 input_boolean:
-  #this gets set when the Nintendo Switch's power on sequence bytes are seen
+  # Internal flag — briefly pulsed when the power-on CEC sequence is seen.
+  # You don't need to monitor this directly.
   nintendo_detected:
     name: Nintendo Switch Detected
     initial: false
 
-  #Turns on when the Nintendo CEC messages are detected and turns off when
-  #it no longer responds to ping. This is the one you want to monitor
+  # This is the entity to use in your dashboards and automations.
+  # On = Switch is powered on, Off = Switch is asleep/off.
   nintendo_power:
     name: Nintendo Switch Power
     icon: mdi:nintendo-switch
     initial: false
 
 input_text:
+  # Rolling buffer of recent CEC frames used for pattern matching.
   cec_byte_history:
     name: CEC Byte History
     initial: ""
@@ -38,6 +56,14 @@ input_text:
     mode: text
 
 automation:
+  # Watches incoming CEC frames and keeps a rolling history of the last 6.
+  # When the history matches the Nintendo Switch's power-on signature,
+  # it pulses nintendo_detected on for 5 seconds.
+  #
+  # The byte sequence 44, 88, bb (repeated twice) is the pattern the
+  # Nintendo Switch broadcasts on the CEC bus when it powers on.
+  # Your Switch may produce a different sequence — enable debug_log
+  # in the add-on and watch cec/in to find yours.
   - alias: "Detect Nintendo Switch Power Sequence"
     trigger:
       - platform: mqtt
@@ -68,6 +94,8 @@ automation:
                 target:
                   entity_id: input_boolean.nintendo_detected
 
+  # When the CEC power-on sequence is detected, mark the Switch as on.
+  # Only fires if it's currently off to avoid re-triggering.
   - alias: "Set Nintendo Switch Power to on when CEC is detected"
     trigger:
       - platform: state
@@ -82,6 +110,7 @@ automation:
         target:
           entity_id: input_boolean.nintendo_power
 
+  # When the Switch stops responding to ping, mark it as off.
   - alias: "Set Nintendo Switch Power off when it goes offline"
     trigger:
       - platform: state
@@ -92,20 +121,13 @@ automation:
         target:
           entity_id: input_boolean.nintendo_power
 
-#this is an unfinished idea
+# Read-only power state sensor for use in dashboards.
+# This mirrors input_boolean.nintendo_power as a proper binary_sensor
+# with an appropriate device class.
 template:
-  - switch:
+  - binary_sensor:
       - name: "Nintendo Switch"
+        unique_id: "nintendo_switch_power"
         icon: mdi:nintendo-switch
+        device_class: power
         state: "{{ is_state('input_boolean.nintendo_power', 'on') }}"
-        turn_on:
-          service: input_boolean.turn_on
-          target:
-            entity_id: input_boolean.nintendo_power
-          #TODO nxbt to turn on the switch?
-
-        turn_off:
-          service: input_boolean.turn_off
-          target:
-            entity_id: input_boolean.nintendo_power
-          #TODO nxbt to turn off the switch?

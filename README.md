@@ -12,16 +12,15 @@ This was originally created to work around the Nintendo Switch's broken HDMI-CEC
 - **Send**: `cec/send`
   Send CEC commands (like `on 0`, `standby 0`, `tx 10:6D`, etc.)
 
+## Sensors
+
+The add-on automatically creates sensor entities in Home Assistant via MQTT discovery — no manual YAML needed:
+
+- `sensor.cec_last_message` — all CEC traffic
+- `sensor.cec_last_incoming_message` — incoming frames only
+- `sensor.cec_last_outgoing_message` — outgoing frames only
+
 ## Example Automations
-
-### Sensor: Last CEC Message
-
-```yaml
-mqtt:
-  sensor:
-    - name: "CEC Last Message"
-      state_topic: "cec/receive"
-```
 
 ### Switch: Turn TV On/Off via MQTT
 

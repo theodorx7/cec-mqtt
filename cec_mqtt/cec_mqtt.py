@@ -32,12 +32,74 @@ else:
     MQTT_TOPIC_OUT = os.getenv("MQTT_TOPIC_OUT", "cec/out")
     DEBUG_LOG = os.getenv("DEBUG_LOG", "false").lower() == "true"
 
+DISCOVERY_PREFIX = "homeassistant"
+ADDON_VERSION = "1.2"
+
+DISCOVERY_SENSORS = [
+    {
+        "object_id": "last_message",
+        "name": "CEC Last Message",
+        "topic_var": "MQTT_TOPIC_ALL",
+        "icon": "mdi:message-text",
+    },
+    {
+        "object_id": "last_incoming_message",
+        "name": "CEC Last Incoming Message",
+        "topic_var": "MQTT_TOPIC_IN",
+        "icon": "mdi:message-arrow-left",
+    },
+    {
+        "object_id": "last_outgoing_message",
+        "name": "CEC Last Outgoing Message",
+        "topic_var": "MQTT_TOPIC_OUT",
+        "icon": "mdi:message-arrow-right",
+    },
+]
+
 process = None
 
 client = mqtt.Client()
 
 if MQTT_USER:
     client.username_pw_set(MQTT_USER, MQTT_PASS)
+
+
+def publish_discovery(client):
+    """Publish MQTT discovery configs so HA auto-creates sensor entities."""
+    topic_map = {
+        "MQTT_TOPIC_ALL": MQTT_TOPIC_ALL,
+        "MQTT_TOPIC_IN": MQTT_TOPIC_IN,
+        "MQTT_TOPIC_OUT": MQTT_TOPIC_OUT,
+    }
+    device_info = {
+        "identifiers": ["cec_mqtt_bridge"],
+        "name": "CEC MQTT Bridge",
+        "manufacturer": "cteachworth",
+        "model": "CEC MQTT Bridge",
+        "sw_version": ADDON_VERSION,
+    }
+    for sensor in DISCOVERY_SENSORS:
+        config_topic = f"{DISCOVERY_PREFIX}/sensor/cec_mqtt/{sensor['object_id']}/config"
+        payload = {
+            "name": sensor["name"],
+            "unique_id": f"cec_mqtt_{sensor['object_id']}",
+            "state_topic": topic_map[sensor["topic_var"]],
+            "icon": sensor["icon"],
+            "device": device_info,
+        }
+        client.publish(config_topic, json.dumps(payload), retain=True)
+        if DEBUG_LOG:
+            print(f"Published discovery: {config_topic}", flush=True)
+    print("MQTT discovery configs published", flush=True)
+
+
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("Connected to MQTT broker", flush=True)
+        client.subscribe(MQTT_TOPIC_SEND)
+        publish_discovery(client)
+    else:
+        print(f"MQTT connection failed with code {rc}", flush=True)
 
 
 def on_message(client, userdata, msg):
@@ -89,9 +151,9 @@ time.sleep(10)
 process = start_cec_client()
 print("CEC listener ready (RX + TX via MQTT)", flush=True)
 
+client.on_connect = on_connect
 client.on_message = on_message
 client.connect(MQTT_BROKER, MQTT_PORT, 60)
-client.subscribe(MQTT_TOPIC_SEND)
 client.loop_start()
 
 reader = threading.Thread(target=read_output, args=(process,), daemon=True)
