@@ -32,8 +32,6 @@
     "mqtt_topic_out": "str",
     "debug_log": "bool"
   },
-  "devices": ["/dev/ttyACM0"],
   "privileged": [],
-  "usb": true,
   "udev": true
 }
