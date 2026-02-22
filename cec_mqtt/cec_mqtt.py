@@ -37,20 +37,20 @@ ADDON_VERSION = "1.2"
 
 DISCOVERY_SENSORS = [
     {
-        "object_id": "last_message",
-        "name": "CEC Last Message",
+        "object_id": "cec_last_message",
+        "name": "Last Message",
         "topic_var": "MQTT_TOPIC_ALL",
         "icon": "mdi:message-text",
     },
     {
-        "object_id": "last_incoming_message",
-        "name": "CEC Last Incoming Message",
+        "object_id": "cec_last_incoming",
+        "name": "Last Incoming",
         "topic_var": "MQTT_TOPIC_IN",
         "icon": "mdi:message-arrow-left",
     },
     {
-        "object_id": "last_outgoing_message",
-        "name": "CEC Last Outgoing Message",
+        "object_id": "cec_last_outgoing",
+        "name": "Last Outgoing",
         "topic_var": "MQTT_TOPIC_OUT",
         "icon": "mdi:message-arrow-right",
     },
@@ -82,6 +82,7 @@ def publish_discovery(client):
         config_topic = f"{DISCOVERY_PREFIX}/sensor/cec_mqtt/{sensor['object_id']}/config"
         payload = {
             "name": sensor["name"],
+            "object_id": sensor["object_id"],
             "unique_id": f"cec_mqtt_{sensor['object_id']}",
             "state_topic": topic_map[sensor["topic_var"]],
             "icon": sensor["icon"],

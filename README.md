@@ -14,11 +14,11 @@ This was originally created to work around the Nintendo Switch's broken HDMI-CEC
 
 ## Sensors
 
-The add-on automatically creates sensor entities in Home Assistant via MQTT discovery — no manual YAML needed:
+The add-on automatically creates the following sensor entities in Home Assistant via MQTT discovery:
 
 - `sensor.cec_last_message` — all CEC traffic
-- `sensor.cec_last_incoming_message` — incoming frames only
-- `sensor.cec_last_outgoing_message` — outgoing frames only
+- `sensor.cec_last_incoming` — incoming frames only
+- `sensor.cec_last_outgoing` — outgoing frames only
 
 ## Example Automations
 
